@@ -2,6 +2,9 @@
 
 Este repositorio contiene dos scripts para los ejercicios del laboratorio de programación cuántica diferencial. Ambos utilizan PennyLane para construir y simular circuitos cuánticos y optimizar parámetros.
 
+El módulo `funciones_auxiliares.py` contiene las funciones compartidas para
+calcular fidelidades de estados y matrices, así como la función de coste.
+
 ## Ejercicios
 
 ### Ejercicio 1: búsqueda de las puertas del circuito Toffoli

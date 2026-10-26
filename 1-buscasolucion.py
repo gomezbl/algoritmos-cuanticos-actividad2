@@ -2,8 +2,16 @@
 # Ejercicio 1 de la Actividad 1
 # ---------------------------------------------------------
 
+from functools import partial
+
 import pennylane as qml
 from pennylane import numpy as np
+
+from funciones_auxiliares import (
+    fidelidad_matrices,
+    fidelidad_unitaria,
+    funcion_coste as calcular_coste,
+)
 
 WIRES = [0, 1, 2]
 DIMENSION_ESTADO = 2 ** len(WIRES)
@@ -63,20 +71,13 @@ matriz_circuito_parametrizado = qml.matrix(
 puerta_toffoli = qml.Toffoli(wires=WIRES)
 matriz_toffoli = qml.matrix(puerta_toffoli, wire_order=WIRES)
 
-
-def fidelidad(parametros):
-    matriz_obtenida = matriz_circuito_parametrizado(parametros)
-
-    solapamiento = qml.math.trace(
-        qml.math.conj(qml.math.transpose(matriz_toffoli))
-        @ matriz_obtenida
-    )
-
-    return qml.math.abs(solapamiento) ** 2 / DIMENSION_ESTADO ** 2
-
-
-def funcion_coste(parametros):
-    return 1.0 - fidelidad(parametros)
+fidelidad = partial(
+    fidelidad_unitaria,
+    circuito=matriz_circuito_parametrizado,
+    matriz_objetivo=matriz_toffoli,
+    dimension=DIMENSION_ESTADO,
+)
+funcion_coste = partial(calcular_coste, calcular_fidelidad=fidelidad)
 
 
 # Inicialización aleatoria reproducible
@@ -146,11 +147,11 @@ matriz_solucion = qml.matrix(
     wire_order=WIRES,
 )()
 
-solapamiento = np.trace(
-    np.conjugate(matriz_toffoli.T) @ matriz_solucion
+fidelidad_final = fidelidad_matrices(
+    matriz_toffoli,
+    matriz_solucion,
+    DIMENSION_ESTADO,
 )
-
-fidelidad_final = np.abs(solapamiento) ** 2 / DIMENSION_ESTADO ** 2
 
 print("Fidelidad:", fidelidad_final)
 print("Error:", 1.0 - fidelidad_final)

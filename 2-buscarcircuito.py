@@ -2,8 +2,15 @@
 # Ejercicio 2 de la Actividad 1
 # ---------------------------------------------------------
 
+from functools import partial
+
 import pennylane as qml
 from pennylane import numpy as np
+
+from funciones_auxiliares import (
+    fidelidad_estado,
+    funcion_coste as calcular_coste,
+)
 
 NUMERO_QUBITS = 3
 NUMERO_CAPAS = 3
@@ -58,23 +65,12 @@ def circuito_variacional(parametros):
 # Fidelidad
 # ---------------------------------------------------------
 
-def fidelidad(parametros):
-
-    estado_obtenido = circuito_variacional(parametros)
-
-    solapamiento = qml.math.sum(
-        qml.math.conj(estado_objetivo) * estado_obtenido
-    )
-
-    return qml.math.abs(solapamiento) ** 2
-
-
-# ---------------------------------------------------------
-# Función de coste
-# ---------------------------------------------------------
-
-def funcion_coste(parametros):
-    return 1.0 - fidelidad(parametros)
+fidelidad = partial(
+    fidelidad_estado,
+    circuito=circuito_variacional,
+    estado_objetivo=estado_objetivo,
+)
+funcion_coste = partial(calcular_coste, calcular_fidelidad=fidelidad)
 
 
 # ---------------------------------------------------------
