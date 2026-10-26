@@ -1,157 +1,147 @@
-# ---------------------------------------------------------
-# Ejercicio 1 de la Actividad 1
-# ---------------------------------------------------------
-
-from functools import partial
+"""Busca las puertas U3 que hacen equivalente el circuito a una Toffoli."""
 
 import pennylane as qml
 from pennylane import numpy as np
 
-from funciones_auxiliares import (
-    fidelidad_matrices,
-    fidelidad_unitaria,
-    funcion_coste as calcular_coste,
+from funciones_auxiliares import unitary_fidelity
+
+
+# Problema y parámetros de optimización
+WIRES = [0, 1, 2]
+NUM_UNKNOWN_GATES = 2
+PARAMETERS_PER_GATE = 3
+NUM_PARAMETERS = NUM_UNKNOWN_GATES * PARAMETERS_PER_GATE
+LEARNING_RATE = 0.05
+MAX_ITERATIONS = 1000
+TOLERANCE = 1e-10
+RANDOM_SEED = 42
+REPORT_INTERVAL = 100
+
+# Objetivo: U(parameters) ≈ U_Toffoli
+target_unitary = qml.matrix(
+    qml.Toffoli(wires=WIRES),
+    wire_order=WIRES,
 )
 
-WIRES = [0, 1, 2]
-DIMENSION_ESTADO = 2 ** len(WIRES)
-MAX_ITERACIONES = 1000
-TOLERANCIA = 1e-10
-TASA_APRENDIZAJE = 0.05
 
-
-def circuito_con_puertas_desconocidas(parametros):
-    """
-    Los tres primeros parámetros definen la primera puerta U3;
-    los tres últimos definen la segunda.
-    """
-    # Bloque conocido anterior a la primera puerta desconocida
+def parameterized_circuit(parameters):
+    """Circuito del enunciado, con dos puertas U3 desconocidas en el qubit 2."""
     qml.T(wires=0)
     qml.CNOT(wires=[0, 1])
     qml.adjoint(qml.T)(wires=1)
     qml.CNOT(wires=[0, 1])
     qml.T(wires=1)
 
-    # Primera puerta U3 desconocida
-    qml.U3(
-        parametros[0],
-        parametros[1],
-        parametros[2],
-        wires=2,
-    )
+    qml.U3(parameters[0], parameters[1], parameters[2], wires=2)
 
-    # Bloque conocido entre las dos puertas desconocidas
     qml.CNOT(wires=[1, 2])
     qml.adjoint(qml.T)(wires=2)
     qml.CNOT(wires=[0, 2])
     qml.T(wires=2)
     qml.CNOT(wires=[1, 2])
 
-    # Segunda puerta U3 desconocida
-    qml.U3(
-        parametros[3],
-        parametros[4],
-        parametros[5],
-        wires=2,
-    )
+    qml.U3(parameters[3], parameters[4], parameters[5], wires=2)
 
-    # Bloque conocido posterior a la segunda puerta desconocida
     qml.CNOT(wires=[0, 2])
     qml.T(wires=2)
     qml.Hadamard(wires=2)
 
 
-# Matriz del circuito para cada conjunto de parámetros
-matriz_circuito_parametrizado = qml.matrix(
-    circuito_con_puertas_desconocidas,
-    wire_order=WIRES,
-)
-
-# Matriz de referencia: puerta Toffoli de tres qubits
-puerta_toffoli = qml.Toffoli(wires=WIRES)
-matriz_toffoli = qml.matrix(puerta_toffoli, wire_order=WIRES)
-
-fidelidad = partial(
-    fidelidad_unitaria,
-    circuito=matriz_circuito_parametrizado,
-    matriz_objetivo=matriz_toffoli,
-    dimension=DIMENSION_ESTADO,
-)
-funcion_coste = partial(calcular_coste, calcular_fidelidad=fidelidad)
+circuit_unitary = qml.matrix(parameterized_circuit, wire_order=WIRES)
 
 
-# Inicialización aleatoria reproducible
-np.random.seed(42)
+def fidelity(parameters):
+    """Fidelidad entre la matriz del circuito y la Toffoli objetivo."""
+    return unitary_fidelity(target_unitary, circuit_unitary(parameters))
 
-parametros = np.array(
-    np.random.uniform(-np.pi, np.pi, size=6),
-    requires_grad=True,
-)
 
-optimizador = qml.AdamOptimizer(stepsize=TASA_APRENDIZAJE)
+def cost_function(parameters):
+    return 1.0 - fidelity(parameters)
 
-for iteracion in range(MAX_ITERACIONES):
-    parametros = optimizador.step(funcion_coste, parametros)
 
-    if iteracion % 50 == 0:
-        coste = funcion_coste(parametros)
-        fidelidad_actual = fidelidad(parametros)
+def optimize_parameters():
+    np.random.seed(RANDOM_SEED)
+    parameters = np.array(
+        np.random.uniform(-np.pi, np.pi, size=NUM_PARAMETERS),
+        requires_grad=True,
+    )
+    optimizer = qml.AdamOptimizer(stepsize=LEARNING_RATE)
 
+    for iteration in range(1, MAX_ITERATIONS + 1):
+        parameters = optimizer.step(cost_function, parameters)
+        cost = cost_function(parameters)
+
+        if iteration % REPORT_INTERVAL == 0:
+            print(
+                f"Iteración {iteration:4d} | "
+                f"Coste: {cost:.6f} | "
+                f"Fidelidad: {1.0 - cost:.6f}"
+            )
+
+        if cost < TOLERANCE:
+            break
+
+    return parameters, iteration
+
+
+def known_solution_unitary():
+    """Construye la solución conocida, solo para validarla tras optimizar."""
+    qml.T(wires=0)
+    qml.CNOT(wires=[0, 1])
+    qml.adjoint(qml.T)(wires=1)
+    qml.CNOT(wires=[0, 1])
+    qml.T(wires=1)
+
+    qml.Hadamard(wires=2)
+
+    qml.CNOT(wires=[1, 2])
+    qml.adjoint(qml.T)(wires=2)
+    qml.CNOT(wires=[0, 2])
+    qml.T(wires=2)
+    qml.CNOT(wires=[1, 2])
+
+    qml.adjoint(qml.T)(wires=2)
+
+    qml.CNOT(wires=[0, 2])
+    qml.T(wires=2)
+    qml.Hadamard(wires=2)
+
+
+def validate_known_solution():
+    solution_unitary = qml.matrix(known_solution_unitary, wire_order=WIRES)()
+    return unitary_fidelity(target_unitary, solution_unitary)
+
+
+def print_results(parameters, iterations):
+    final_fidelity = fidelity(parameters)
+    final_cost = cost_function(parameters)
+    u3_parameters = np.reshape(
+        parameters,
+        (NUM_UNKNOWN_GATES, PARAMETERS_PER_GATE),
+    )
+
+    print("\nResultados del ejercicio 1")
+    print(f"Iteraciones realizadas: {iterations}")
+    print(f"Coste final: {final_cost:.10f}")
+    print(f"Fidelidad final: {final_fidelity:.10f}")
+    print("Parámetros U3 encontrados (theta, phi, lambda):")
+    for gate_number, angles in enumerate(u3_parameters, start=1):
         print(
-            f"Iteración {iteracion:4d} | "
-            f"Coste = {coste:.10f} | "
-            f"Fidelidad = {fidelidad_actual:.10f}"
+            f"  U3 {gate_number}: "
+            f"theta={angles[0]:+.8f}, phi={angles[1]:+.8f}, "
+            f"lambda={angles[2]:+.8f}"
         )
 
-    if funcion_coste(parametros) < TOLERANCIA:
-        break
+    known_fidelity = validate_known_solution()
+    print("\nValidación de la solución conocida:")
+    print(f"Fidelidad con Toffoli: {known_fidelity:.10f}")
+    print(f"Error: {1.0 - known_fidelity:.10e}")
 
 
-# Resultados de la búsqueda
-print("\nParámetros encontrados:")
-print(parametros)
-
-print("\nCoste final:")
-print(funcion_coste(parametros))
-
-print("\nFidelidad final:")
-print(fidelidad(parametros))
-
-# Comprueba una solución conocida para las dos puertas U3
-def circuito_solucion():
-    qml.T(wires=0)
-    qml.CNOT(wires=[0, 1])
-    qml.adjoint(qml.T)(wires=1)
-    qml.CNOT(wires=[0, 1])
-    qml.T(wires=1)
-
-    # Primera interrogación
-    qml.Hadamard(wires=2)
-
-    qml.CNOT(wires=[1, 2])
-    qml.adjoint(qml.T)(wires=2)
-    qml.CNOT(wires=[0, 2])
-    qml.T(wires=2)
-    qml.CNOT(wires=[1, 2])
-
-    # Segunda interrogación
-    qml.adjoint(qml.T)(wires=2)
-
-    qml.CNOT(wires=[0, 2])
-    qml.T(wires=2)
-    qml.Hadamard(wires=2)
+def main():
+    parameters, iterations = optimize_parameters()
+    print_results(parameters, iterations)
 
 
-matriz_solucion = qml.matrix(
-    circuito_solucion,
-    wire_order=WIRES,
-)()
-
-fidelidad_final = fidelidad_matrices(
-    matriz_toffoli,
-    matriz_solucion,
-    DIMENSION_ESTADO,
-)
-
-print("Fidelidad:", fidelidad_final)
-print("Error:", 1.0 - fidelidad_final)
+if __name__ == "__main__":
+    main()

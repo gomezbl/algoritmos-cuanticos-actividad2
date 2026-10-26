@@ -1,32 +1,18 @@
-"""Funciones compartidas para calcular fidelidades y costes."""
+"""Cálculos de fidelidad compartidos por los dos ejercicios."""
 
 import pennylane as qml
 
 
-def fidelidad_estado(parametros, circuito, estado_objetivo):
-    """Calcula la fidelidad entre el estado objetivo y el generado."""
-    estado_obtenido = circuito(parametros)
-    solapamiento = qml.math.sum(
-        qml.math.conj(estado_objetivo) * estado_obtenido
+def state_fidelity(target_state, circuit_state):
+    """Fidelidad entre dos estados puros, incluyendo sus fases relativas."""
+    overlap = qml.math.sum(qml.math.conj(target_state) * circuit_state)
+    return qml.math.abs(overlap) ** 2
+
+
+def unitary_fidelity(target_unitary, circuit_unitary):
+    """Fidelidad normalizada entre dos matrices unitarias."""
+    dimension = target_unitary.shape[0]
+    overlap = qml.math.trace(
+        qml.math.conj(qml.math.transpose(target_unitary)) @ circuit_unitary
     )
-    return qml.math.abs(solapamiento) ** 2
-
-
-def fidelidad_matrices(matriz_objetivo, matriz_obtenida, dimension):
-    """Calcula la fidelidad normalizada entre dos matrices unitarias."""
-    solapamiento = qml.math.trace(
-        qml.math.conj(qml.math.transpose(matriz_objetivo))
-        @ matriz_obtenida
-    )
-    return qml.math.abs(solapamiento) ** 2 / dimension**2
-
-
-def fidelidad_unitaria(parametros, circuito, matriz_objetivo, dimension):
-    """Calcula la fidelidad entre la matriz del circuito y la matriz objetivo."""
-    matriz_obtenida = circuito(parametros)
-    return fidelidad_matrices(matriz_objetivo, matriz_obtenida, dimension)
-
-
-def funcion_coste(parametros, calcular_fidelidad):
-    """Devuelve el coste complementario a la fidelidad."""
-    return 1.0 - calcular_fidelidad(parametros)
+    return qml.math.abs(overlap) ** 2 / dimension**2
